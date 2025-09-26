@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>各種部材断面性能値検索＆任意断面の性能値算出</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>各種部材断面性能値検索＆任意断面の性能値算出</h1>
+
+        <div class="selector-group">
+            <label for="steel-type-select">1. 部材断面の種類または断面形状を選択してください</label>
+            <select id="steel-type-select">
+                <option value="">▼ 選択してください</option>
+                <optgroup label="JIS規格鋼材">
+                    <option value="hkatakou_hiro">H形鋼 (広幅)</option>
+                    <option value="hkatakou_naka">H形鋼 (中幅)</option>
+                    <option value="hkatakou_hoso">H形鋼 (細幅)</option>
+                    <option value="keiryouhkatakou">軽量H形鋼</option>
+                    <option value="ikatakou">I形鋼</option>
+                    <option value="mizogatakou">みぞ形鋼</option>
+                    <option value="touhenyamakatakou">等辺山形鋼</option>
+                    <option value="futouhenyamagata">不等辺山形鋼</option>
+                    <option value="keimizogatakou">軽みぞ形鋼</option>
+                    <option value="rippumizokatakou">リップみぞ形鋼</option>
+                    <option value="seihoukei">角形鋼管 (正方形)</option>
+                    <option value="tyouhoukei">角形鋼管 (長方形)</option>
+                    <option value="koukan">丸形鋼管</option>
+                    <option value="keiryourippuhkatakou">軽量リップH形鋼</option>
+                </optgroup>
+                <optgroup label="カスタム断面形状">
+                    <option value="矩形">矩形断面</option>
+                    <option value="円形">円形断面</option>
+                </optgroup>
+            </select>
+        </div>
+        
+        <div class="main-content">
+            <div class="table-section">
+                <div id="image-wrapper" class="hidden">
+                   <img id="steel-image" src="" alt="鋼材説明図">
+                </div>
+                <div id="full-table-controls" class="hidden">
+                    <p class="table-guide">当該の行をクリックすると、下欄に性能値が表示されます</p>
+                </div>
+                <div id="full-table-container" class="table-container hidden">
+                    <table class="full-table">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            </div>
+
+        <div id="pickup-wrapper" class="hidden">
+              <h2>ピックアップされた性能値</h2>
+              <div class="pickup-container">
+                  <table class="pickup-table">
+                      <tbody></tbody>
+                  </table>
+                  <div id="svg-wrapper">
+                      <svg id="section-svg"></svg>
+                  </div>
+              </div>
+              <div class="axis-selector hidden" id="pickup-axis-selector">
+                <strong>適用する断面２次モーメント:</strong>
+                <label><input type="radio" name="axis-select" value="x" checked> 強軸 (I<sub>x</sub>)</label>
+                <label><input type="radio" name="axis-select" value="y"> 弱軸 (I<sub>y</sub>)</label>
+              </div>
+              <div style="text-align: center; margin-top: 20px;">
+                <button id="apply-selection-btn">この断面性能を適用</button>
+              </div>
+        </div>
+    </div>
+
+    <div class="container hidden" id="custom-calculator-wrapper">
+        <h2>断面性能カスタム計算ツール</h2>
+        <p>
+            下のフィールドに寸法(mm)を入力すると、性能値が即座に計算されます。<br>
+            <small>※角部の丸み(r)は無視した近似計算です。規格値と完全に一致しない場合があります。</small>
+        </p>
+        <div class="custom-calculator-content">
+            <div id="custom-inputs-wrapper">
+                <div id="custom-inputs">
+                </div>
+                <div id="custom-svg-wrapper">
+                    <svg id="custom-section-svg"></svg>
+                </div>
+            </div>
+            <div id="custom-results">
+                <table class="pickup-table" id="custom-results-table">
+                    <tbody>
+                    </tbody>
+                </table>
+                <div class="axis-selector hidden" id="custom-axis-selector">
+                  <strong>適用する断面２次モーメント:</strong>
+                  <label><input type="radio" name="custom-axis-select" value="x" checked> 強軸 (I<sub>x</sub>)</label>
+                  <label><input type="radio" name="custom-axis-select" value="y"> 弱軸 (I<sub>y</sub>)</label>
+                </div>
+                 <div style="text-align: center; margin-top: 20px;">
+                    <button id="apply-custom-btn">この断面性能を適用</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="steel_selector.js"></script>
+    <script src="communication.js"></script>
+</body>
+</html>
