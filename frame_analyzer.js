@@ -462,12 +462,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return { ctx, transform, scale, offsetX, offsetY };
         }
 
-        if (!panZoomState.isInitialized) {
+        const isModelCanvas = canvas.id === 'model-canvas';
+
+        if (isModelCanvas && panZoomState.isInitialized) {
+            // モデル図が初期化済みの場合、既存のパン・ズーム情報を維持
+            ({ scale, offsetX, offsetY } = panZoomState);
+        } else {
+            // 結果の図、またはモデル図の初回描画時は、常に中央に配置
             offsetX = padding + (rect.width - 2 * padding - modelWidth * scale) / 2 - minX * scale;
             offsetY = padding + (rect.height - 2 * padding - modelHeight * scale) / 2 + maxY * scale;
-            panZoomState = { scale, offsetX, offsetY, isInitialized: true };
-        } else {
-            ({ scale, offsetX, offsetY } = panZoomState);
+
+            if (isModelCanvas) {
+                // モデル図の初回描画時のみ、状態を保存
+                panZoomState = { scale, offsetX, offsetY, isInitialized: true };
+            }
         }
         
         const transform = (x, y) => ({ x: x * scale + offsetX, y: -y * scale + offsetY });
@@ -551,15 +559,20 @@ document.addEventListener('DOMContentLoaded', () => {
                         max_dy = Math.max(max_dy, Math.abs(u_local * s + v_local * c));
                     }
                 });
-                const rect = elements.displacementCanvas.getBoundingClientRect(), padding = 70;
-                const modelWidth = Math.max(...nodes.map(n => n.x)) - Math.min(...nodes.map(n => n.x));
-                const modelHeight = Math.max(...nodes.map(n => n.y)) - Math.min(...nodes.map(n => n.y));
-                const remainingPixelWidth = (rect.width - 2 * padding) - (modelWidth * scale), remainingPixelHeight = (rect.height - 2 * padding) - (modelHeight * scale);
-                const maxDispPixelX = max_dx * scale, maxDispPixelY = max_dy * scale;
-                const scale_x = (maxDispPixelX > 1e-12) ? (remainingPixelWidth) / (2 * maxDispPixelX) : Infinity;
-                const scale_y = (maxDispPixelY > 1e-12) ? (remainingPixelHeight) / (2 * maxDispPixelY) : Infinity;
-                const autoScale = Math.min(scale_x, scale_y);
-                dispScale = (!isFinite(autoScale) || autoScale < 0) ? 0 : Math.min(autoScale, 20);
+                // モデルの最大変位量 (モデル単位)
+                const max_model_disp = Math.max(max_dx, max_dy);
+
+                // 目標とする画面上の最大変位ピクセル数 (この値を変えると、変位図の見た目の大きさが変わります)
+                const TARGET_MAX_DISP_PIXELS = 40;
+
+                if (max_model_disp > 1e-12 && scale > 1e-12) {
+                    // 表示倍率 = (目標ピクセル数) / (モデル単位の最大変位量 * 描画スケール)
+                    const autoScale = TARGET_MAX_DISP_PIXELS / (max_model_disp * scale);
+                    // 極端に大きい値や小さい値にならないように調整
+                    dispScale = isFinite(autoScale) ? Math.max(0.1, Math.min(autoScale, 5000)) : 0;
+                } else {
+                    dispScale = 0;
+                }
                 lastDisplacementScale = dispScale;
                 dispScaleInput.value = dispScale.toFixed(2);
             }
@@ -1342,8 +1355,12 @@ const createEInputHTML = (idPrefix, currentE = '205000') => {
         const selectId = `${idPrefix}-select`, inputId = `${idPrefix}-input`;
         return ` <div style="display: flex; flex-direction: column; gap: 2px;"> <select id="${selectId}" onchange="const input = document.getElementById('${inputId}'); if (this.value !== 'custom') { input.value = this.value; } input.readOnly = (this.value !== 'custom'); input.dispatchEvent(new Event('change'));"> ${options_html} </select> <input id="${inputId}" type="number" value="${currentE}" title="弾性係数 E (N/mm²)" style="display: inline-block;" ${!isPresetMaterial ? '' : 'readonly'}> </div> `;
     };
+   
     const createStrengthInputHTML = (materialType, idPrefix, currentValue) => {
         let html = '';
+        const selectId = `${idPrefix}-select`;
+        const inputId = `${idPrefix}-input`;
+
         switch(materialType) {
             case 'steel': {
                 const materials = { "235": "SS400, SN400B", "295": "SM490", "325": "SN490B", "355": "SM520" };
@@ -1352,14 +1369,14 @@ const createEInputHTML = (idPrefix, currentE = '205000') => {
                 let options_html = '';
                 for (const [value, name] of Object.entries(materials)) { options_html += `<option value="${value}" ${f_val_str === value ? 'selected' : ''}>${name} (F=${value})</option>`; }
                 options_html += `<option value="custom" ${!isPreset ? 'selected' : ''}>任意入力</option>`;
-                html = `<div data-strength-type="F-value"><select onchange="this.nextElementSibling.value = this.value; this.nextElementSibling.readOnly = (this.value !== 'custom');">${options_html}</select><input type="number" value="${f_val_str}" ${!isPreset ? '' : 'readonly'}></div>`;
+                html = `<div data-strength-type="F-value"><select id="${selectId}" onchange="const input = document.getElementById('${inputId}'); input.value = this.value; input.readOnly = (this.value !== 'custom');">${options_html}</select><input id="${inputId}" type="number" value="${f_val_str}" ${!isPreset ? '' : 'readonly'}></div>`;
                 break;
             }
             case 'wood': {
                 const wood_val = currentValue || "Sugi";
                 let isPresetWood = woodAllowableStresses.hasOwnProperty(wood_val);
-                let html_temp = `<div data-strength-type="wood-type"><select onchange="
-                    const input = this.nextElementSibling;
+                let html_temp = `<div data-strength-type="wood-type"><select id="${selectId}" onchange="
+                    const input = document.getElementById('${inputId}');
                     if (this.value !== 'custom') {
                         input.value = woodAllowableStresses[this.value].fc[1];
                         input.readOnly = true;
@@ -1371,18 +1388,20 @@ const createEInputHTML = (idPrefix, currentE = '205000') => {
                 }
                 html_temp += `<option value="custom" ${!isPresetWood ? 'selected' : ''}>任意入力</option>`;
                 const displayValue = isPresetWood ? woodAllowableStresses[wood_val].fc[1] : wood_val;
-                html_temp += `</select><input type="number" value="${displayValue}" ${isPresetWood ? 'readonly' : ''}></div>`;
+                html_temp += `</select><input id="${inputId}" type="number" value="${displayValue}" ${isPresetWood ? 'readonly' : ''}></div>`;
                 html = html_temp;
                 break;
             }
             case 'stainless': {
                 const stainValue = currentValue || '205';
-                html = `<div data-strength-type="F-stainless"><select onchange="this.nextElementSibling.value = this.value; this.nextElementSibling.readOnly = (this.value !== 'custom');"><option value="205" ${stainValue === '205' ? 'selected' : ''}>SUS304</option><option value="235" ${stainValue === '235' ? 'selected' : ''}>SUS316</option><option value="custom" ${!['205','235'].includes(stainValue) ? 'selected' : ''}>任意入力</option></select><input type="number" value="${stainValue}" ${['205','235'].includes(stainValue) ? 'readonly' : ''}></div>`;
+                const isPreset = ['205', '235'].includes(stainValue);
+                html = `<div data-strength-type="F-stainless"><select id="${selectId}" onchange="const input = document.getElementById('${inputId}'); input.value = this.value; input.readOnly = (this.value !== 'custom');"><option value="205" ${stainValue === '205' ? 'selected' : ''}>SUS304</option><option value="235" ${stainValue === '235' ? 'selected' : ''}>SUS316</option><option value="custom" ${!isPreset ? 'selected' : ''}>任意入力</option></select><input id="${inputId}" type="number" value="${stainValue}" ${isPreset ? 'readonly' : ''}></div>`;
                 break;
             }
             case 'aluminum': {
                 const alumValue = currentValue || '150';
-                html = `<div data-strength-type="F-aluminum"><select onchange="this.nextElementSibling.value = this.value; this.nextElementSibling.readOnly = (this.value !== 'custom');"><option value="150" ${alumValue === '150' ? 'selected' : ''}>A5052</option><option value="185" ${alumValue === '185' ? 'selected' : ''}>A6061-T6</option><option value="custom" ${!['150','185'].includes(alumValue) ? 'selected' : ''}>任意入力</option></select><input type="number" value="${alumValue}" ${['150','185'].includes(alumValue) ? 'readonly' : ''}></div>`;
+                const isPreset = ['150', '185'].includes(alumValue);
+                html = `<div data-strength-type="F-aluminum"><select id="${selectId}" onchange="const input = document.getElementById('${inputId}'); input.value = this.value; input.readOnly = (this.value !== 'custom');"><option value="150" ${alumValue === '150' ? 'selected' : ''}>A5052</option><option value="185" ${alumValue === '185' ? 'selected' : ''}>A6061-T6</option><option value="custom" ${!isPreset ? 'selected' : ''}>任意入力</option></select><input id="${inputId}" type="number" value="${alumValue}" ${isPreset ? 'readonly' : ''}></div>`;
                 break;
             }
             default: 
@@ -1390,6 +1409,8 @@ const createEInputHTML = (idPrefix, currentE = '205000') => {
         }
         return html;
     };
+
+
     const memberRowHTML = (i, j, E = '205000', F='235', I = 1.84e-5, A = 2.34e-3, Z = 1.23e-3, i_conn = 'rigid', j_conn = 'rigid') => {
         return [
             `<input type="number" value="${i}">`,
